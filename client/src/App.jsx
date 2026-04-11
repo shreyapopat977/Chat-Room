@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import Chat from './pages/Chat';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
@@ -15,7 +16,7 @@ function App() {
             path="/chat"
             element={
               <ProtectedRoute>
-                <div>Chat Page — Agle step mein banenge</div>
+                <Chat />
               </ProtectedRoute>
             }
           />

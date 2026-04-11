@@ -4,38 +4,48 @@ import api from '../api/axios';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-    const [user, setUser] = useState(null);
+    // localStorage se turant user lo — no flash
+    const [user, setUser] = useState(() => {
+        const saved = localStorage.getItem('user');
+        return saved ? JSON.parse(saved) : null;
+    });
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const token = localStorage.getItem('token');
-        const savedUser = localStorage.getItem('user');
-        if (token && savedUser) {
-            setUser(JSON.parse(savedUser));
-        }
-        setLoading(false);
+        const checkAuth = async () => {
+            try {
+                const { data } = await api.get('/auth/me');
+                setUser(data);
+                localStorage.setItem('user', JSON.stringify(data));
+            } catch {
+                // Cookie expire/invalid — clear karo
+                setUser(null);
+                localStorage.removeItem('user');
+            } finally {
+                setLoading(false);
+            }
+        };
+        checkAuth();
     }, []);
 
     const login = async (email, password) => {
         const { data } = await api.post('/auth/login', { email, password });
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
+        localStorage.setItem('user', JSON.stringify(data.user));
         return data;
     };
 
     const signup = async (username, email, password) => {
         const { data } = await api.post('/auth/signup', { username, email, password });
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user));
         setUser(data.user);
+        localStorage.setItem('user', JSON.stringify(data.user));
         return data;
     };
 
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+    const logout = async () => {
+        await api.post('/auth/logout');
         setUser(null);
+        localStorage.removeItem('user');
     };
 
     return (
