@@ -13,9 +13,11 @@ export const useSocket = () => {
     useEffect(() => {
         if (!user) return;
 
-        // Socket connect karo — cookie automatically jayegi
         socketRef.current = io(SOCKET_URL, {
             withCredentials: true,
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 2000,
         });
 
         const socket = socketRef.current;
@@ -30,7 +32,6 @@ export const useSocket = () => {
             setIsConnected(false);
         });
 
-        // Kaun kaun online hai
         socket.on('onlineUsers', (users) => {
             setOnlineUsers(users);
         });
@@ -43,7 +44,6 @@ export const useSocket = () => {
             setOnlineUsers((prev) => prev.filter((id) => id !== userId));
         });
 
-        // Cleanup — component unmount pe disconnect
         return () => {
             socket.disconnect();
         };

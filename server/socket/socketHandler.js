@@ -11,24 +11,36 @@ const socketHandler = (io) => {
 
     // ─── MIDDLEWARE — Socket connection pe token verify karo ───
     io.use(async (socket, next) => {
+    try {
+        const cookies = cookie.parse(socket.handshake.headers.cookie || '');
+        let token = cookies.access_token;
+
+        if (!token) return next(new Error('No token'));
+
+        let decoded;
         try {
-            // Cookie se token lo
-            const cookies = cookie.parse(socket.handshake.headers.cookie || '');
-            const token = cookies.access_token;
-
-            if (!token) return next(new Error('Authentication error — token nahi hai'));
-
-            const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            const user = await User.findById(decoded.id).select('-password');
-
-            if (!user) return next(new Error('User nahi mila'));
-
-            socket.user = user; // Socket pe user attach karo
-            next();
+            decoded = jwt.verify(token, process.env.JWT_SECRET);
         } catch (err) {
-            next(new Error('Token invalid'));
+            // Access token expire — refresh token try karo
+            const refreshToken = cookies.refresh_token;
+            if (!refreshToken) return next(new Error('No refresh token'));
+            
+            try {
+                decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+            } catch {
+                return next(new Error('Both tokens invalid'));
+            }
         }
-    });
+
+        const user = await User.findById(decoded.id).select('-password');
+        if (!user) return next(new Error('User not found'));
+
+        socket.user = user;
+        next();
+    } catch (err) {
+        next(new Error('Auth error'));
+    }
+});
 
     // ─── CONNECTION ───────────────────────────────────────────
     io.on('connection', (socket) => {

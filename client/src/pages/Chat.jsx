@@ -2,10 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import Sidebar from '../components/chat/Sidebar';
 import ChatWindow from '../components/chat/ChatWindow';
 import { useSocket } from '../../hooks/useSocket';
+import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 
 const Chat = () => {
     const { socket, onlineUsers } = useSocket();
+    const { user } = useAuth();
 
     const [conversations, setConversations] = useState([]);
     const [selectedConversation, setSelectedConversation] = useState(null);
@@ -13,7 +15,7 @@ const Chat = () => {
     const [loadingMessages, setLoadingMessages] = useState(false);
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
-    // ─── Conversations load karo ───────────────────────
+    // ─── Fetch conversations on mount ─────────────────
     useEffect(() => {
         const fetchConversations = async () => {
             try {
@@ -26,31 +28,24 @@ const Chat = () => {
         fetchConversations();
     }, []);
 
-    // ─── Socket events listen karo ────────────────────
+    // ─── Socket events ────────────────────────────────
     useEffect(() => {
         if (!socket) return;
 
-        // Naya message aaya
         socket.on('receiveMessage', ({ conversationId, message }) => {
-            // Agar current conversation mein aaya
-            if (selectedConversation?._id === conversationId) {
+            if (selectedConversation?.id === conversationId) {
                 setMessages((prev) => [...prev, message]);
             }
 
-            // Sidebar update karo — lastMessage
             setConversations((prev) =>
                 prev.map((conv) =>
                     conv.id === conversationId
-                        ? {
-                              ...conv,
-                              lastMessage: { text: message.text, createdAt: message.createdAt },
-                          }
+                        ? { ...conv, lastMessage: { text: message.text, createdAt: message.createdAt } }
                         : conv
                 )
             );
         });
 
-        // Notification — dusri conversation mein message aaya
         socket.on('newMessageNotification', ({ conversationId }) => {
             setConversations((prev) =>
                 prev.map((conv) =>
@@ -67,12 +62,11 @@ const Chat = () => {
         };
     }, [socket, selectedConversation]);
 
-    // ─── Contact select karo ──────────────────────────
+    // ─── Select a conversation ────────────────────────
     const handleSelectConversation = useCallback(
         async (conversation) => {
-            // Pehli conversation se leave karo
             if (selectedConversation) {
-                socket?.emit('leaveConversation', selectedConversation._id);
+                socket?.emit('leaveConversation', selectedConversation._id || selectedConversation.id);
             }
 
             setSelectedConversation(conversation);
@@ -80,19 +74,15 @@ const Chat = () => {
             setLoadingMessages(true);
 
             try {
-                // Messages fetch karo
-                const { data } = await api.get(`/messages/${conversation._id}`);
+                const convId = conversation._id || conversation.id;
+                const { data } = await api.get(`/messages/${convId}`);
                 setMessages(data.messages);
 
-                // Socket room join karo
-                socket?.emit('joinConversation', conversation._id);
+                socket?.emit('joinConversation', convId);
 
-                // Unread count 0 karo
                 setConversations((prev) =>
                     prev.map((conv) =>
-                        conv.id === conversation._id
-                            ? { ...conv, unreadCount: 0 }
-                            : conv
+                        conv.id === conversation.id ? { ...conv, unreadCount: 0 } : conv
                     )
                 );
             } catch (err) {
@@ -104,15 +94,43 @@ const Chat = () => {
         [socket, selectedConversation]
     );
 
-    // ─── Message bhejo ────────────────────────────────
+    // ─── Start new conversation ───────────────────────
+    const handleStartChat = useCallback(async (userId) => {
+        try {
+            const { data } = await api.get(`/conversations/${userId}`);
+
+            const myId = user?.id || user?._id;
+            const otherUser = data.participants.find(
+                (p) => p._id.toString() !== myId.toString()
+            );
+
+            const conv = {
+                id: data._id,
+                _id: data._id,
+                contact: otherUser,
+                lastMessage: data.lastMessage || null,
+                unreadCount: 0,
+                updatedAt: data.updatedAt,
+            };
+
+            setConversations((prev) => {
+                const exists = prev.find((c) => c.id === conv.id);
+                if (exists) return prev;
+                return [conv, ...prev];
+            });
+
+            handleSelectConversation(conv);
+        } catch (err) {
+            console.error('Start chat failed:', err);
+        }
+    }, [user, handleSelectConversation]);
+
+    // ─── Send message ─────────────────────────────────
     const handleSendMessage = useCallback(
         (text) => {
             if (!text.trim() || !selectedConversation || !socket) return;
-
-            socket.emit('sendMessage', {
-                conversationId: selectedConversation._id,
-                text: text.trim(),
-            });
+            const convId = selectedConversation._id || selectedConversation.id;
+            socket.emit('sendMessage', { conversationId: convId, text: text.trim() });
         },
         [socket, selectedConversation]
     );
@@ -133,6 +151,7 @@ const Chat = () => {
                     selectedConversation={selectedConversation}
                     onlineUsers={onlineUsers}
                     onSelectConversation={handleSelectConversation}
+                    onStartChat={handleStartChat}
                 />
             </div>
 

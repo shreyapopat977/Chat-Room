@@ -7,6 +7,8 @@ const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
 const socketHandler = require('./socket/socketHandler');
 
+
+
 dotenv.config();
 connectDB();
 
@@ -35,6 +37,7 @@ app.use(cookieParser());
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/conversations', require('./routes/conversationRoutes'));
 app.use('/api/messages', require('./routes/messageRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 app.get('/', (req, res) => res.send('Chat-Room API running'));
 
